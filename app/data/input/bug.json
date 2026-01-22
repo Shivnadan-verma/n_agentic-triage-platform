@@ -1,0 +1,6 @@
+{
+  "bug_id": "BUG-1001",
+  "severity": "High",
+  "product": "Checkout",
+  "description": "Payment timeout during peak hours"
+}

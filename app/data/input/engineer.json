@@ -1,0 +1,22 @@
+[
+  {
+    "ldap_id": "u101",
+    "name": "Amit Sharma",
+    "role": "Backend Engineer",
+    "skill_set": ["Payments", "Java"],
+    "product": "Checkout",
+    "total_no_of_bugs": 12,
+    "rating": 4.6,
+    "acceptance_rate": 0.91
+  },
+  {
+    "ldap_id": "u102",
+    "name": "Rohit Verma",
+    "role": "Backend Engineer",
+    "skill_set": ["Orders"],
+    "product": "Orders",
+    "total_no_of_bugs": 5,
+    "rating": 4.2,
+    "acceptance_rate": 0.88
+  }
+]

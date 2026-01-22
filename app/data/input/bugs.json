@@ -1,0 +1,32 @@
+[
+  {
+    "bug_id": "BUG-1001",
+    "severity": "High",
+    "product": "Checkout",
+    "description": "Payment timeout during peak hours"
+  },
+  {
+    "bug_id": "BUG-1002",
+    "severity": "Medium",
+    "product": "Orders",
+    "description": "Order status not updating correctly"
+  },
+  {
+    "bug_id": "BUG-1003",
+    "severity": "Critical",
+    "product": "Checkout",
+    "description": "Payment gateway connection failure"
+  },
+  {
+    "bug_id": "BUG-1004",
+    "severity": "Low",
+    "product": "Orders",
+    "description": "Minor UI alignment issue in order list"
+  },
+  {
+    "bug_id": "BUG-1005",
+    "severity": "High",
+    "product": "Checkout",
+    "description": "Discount code validation failing"
+  }
+]
