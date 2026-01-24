@@ -1,31 +1,62 @@
-from app.agents.common.base_agent import BaseAgent
+import json
+from pathlib import Path
+from typing import AsyncGenerator
+from google.adk.agents import BaseAgent, InvocationContext
+from google.adk.events import Event
+
 from app.agents.common.common_guardrails import ensure_dict, ensure_list, ensure_keys
+from app.agents.common.event import state_delta_event
 from app.schemas.engineer_schema import REQUIRED_ENGINEER_FIELDS
-from .graph import select
+from .graph import pick_best
 from .state import initial_state
-from .prompt import SYSTEM_PROMPT
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+
 
 class AssignmentAgent(BaseAgent):
-    PROMPT = SYSTEM_PROMPT
+    """
+    ADK Custom Agent (no LLM).
+    Reads bug from ctx.session.state["bug"].
+    Loads engineers from app/data/input/engineer.json.
+    Writes assignment into ctx.session.state["assignment"].
+    """
 
-    def run(self, input, state=None):
-        ensure_dict(input)
-        ensure_dict(input["bug"])
-        ensure_list(input["engineers"])
+    def __init__(self, name="AssignmentAgent"):
+        super().__init__(name=name, sub_agents=[])
 
-        for e in input["engineers"]:
-            ensure_keys(e, REQUIRED_ENGINEER_FIELDS)
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
+        ctx.session.state.setdefault("assignment_state", initial_state())
 
-        state = self.init_state(state, initial_state())
-        chosen = select(input["engineers"], input["bug"])
+        bug = ctx.session.state.get("bug")
+        ensure_dict(bug, "bug")
+        ensure_keys(bug, ["bug_id", "product", "severity", "description"], "bug")
 
-        result = {
-            "bug_id": input["bug"]["bug_id"],
-            "assigned_to": chosen["ldap_id"]
+        eng_path = _PROJECT_ROOT / "app" / "data" / "input" / "engineer.json"
+        with open(eng_path, "r", encoding="utf-8") as f:
+            engineers = json.load(f)
+        ensure_list(engineers, "engineers")
+
+        for e in engineers:
+            ensure_dict(e, "engineer")
+            ensure_keys(e, REQUIRED_ENGINEER_FIELDS, "engineer")
+
+        chosen = pick_best(engineers, bug)
+
+        assignment = {
+            "bug_id": bug["bug_id"],
+            "assigned_to": {
+                "ldap_id": chosen["ldap_id"],
+                "name": chosen["name"],
+                "role": chosen["role"],
+            },
         }
 
-        state = self.update_state(state, result)
-        return result, state
+        st = ctx.session.state["assignment_state"]
+        st["run_count"] += 1
+        st["history"].append(assignment)
 
-# Export root_agent for ADK CLI (fallback if main.py is not found)
-root_agent = AssignmentAgent()
+        yield state_delta_event(self.name, {
+            "assignment": assignment,
+            "engineer": chosen,                 # full details
+            "assignment_state": st,
+        })

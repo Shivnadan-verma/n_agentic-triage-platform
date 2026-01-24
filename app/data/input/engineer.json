@@ -13,7 +13,7 @@
     "ldap_id": "u102",
     "name": "Rohit Verma",
     "role": "Backend Engineer",
-    "skill_set": ["Orders"],
+    "skill_set": ["python", "Database"],
     "product": "Orders",
     "total_no_of_bugs": 5,
     "rating": 4.2,

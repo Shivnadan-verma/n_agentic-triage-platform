@@ -1,3 +1,4 @@
 # Google ADK (Agent Development Kit) for agent framework
 google-adk
 google-cloud-aiplatform
+python-dotenv

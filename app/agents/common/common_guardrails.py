@@ -1,12 +1,12 @@
-def ensure_dict(data):
-    if not isinstance(data, dict):
-        raise ValueError("Expected dictionary input")
+def ensure_dict(x, name="input"):
+    if not isinstance(x, dict):
+        raise ValueError(f"{name} must be a dict")
 
-def ensure_list(data):
-    if not isinstance(data, list):
-        raise ValueError("Expected list input")
+def ensure_list(x, name="input"):
+    if not isinstance(x, list):
+        raise ValueError(f"{name} must be a list")
 
-def ensure_keys(data, keys):
-    for k in keys:
-        if k not in data:
-            raise ValueError(f"Missing key: {k}")
+def ensure_keys(d: dict, keys: list[str], name="payload"):
+    missing = [k for k in keys if k not in d]
+    if missing:
+        raise ValueError(f"{name} missing keys: {missing}")

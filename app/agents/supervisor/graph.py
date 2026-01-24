@@ -1,3 +1,2 @@
-def determine_routes():
-    # Mandatory pipeline
+def routes():
     return ["bug_analysis", "assignment"]

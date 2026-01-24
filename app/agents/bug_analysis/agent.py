@@ -1,23 +1,40 @@
-from .graph import analyze
-from .state import initial_state
-from .prompt import SYSTEM_PROMPT
+from typing import AsyncGenerator
+from google.adk.agents import BaseAgent, InvocationContext
+from google.adk.events import Event
+
 from app.agents.common.common_guardrails import ensure_dict, ensure_keys
-from app.agents.common.base_agent import BaseAgent
+from app.agents.common.event import state_delta_event
+from .graph import impact_score
+from .state import initial_state
 
 class BugAnalysisAgent(BaseAgent):
-    PROMPT = SYSTEM_PROMPT
+    """
+    ADK Custom Agent (no LLM).
+    Writes analysis into ctx.session.state["analysis"].
+    """
 
-    def run(self, input, state=None):
-        ensure_dict(input)
-        ensure_keys(input, ["bug_id", "severity"])
+    def __init__(self, name="BugAnalysisAgent"):
+        super().__init__(name=name, sub_agents=[])
 
-        state = self.init_state(state, initial_state())
-        impact = analyze(input["severity"])
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
+        # init agent local state
+        ctx.session.state.setdefault("bug_analysis_state", initial_state())
 
-        result = {"bug_id": input["bug_id"], "impact_score": impact}
-        state = self.update_state(state, result)
+        bug = ctx.session.state.get("bug")
+        ensure_dict(bug, "bug")
+        ensure_keys(bug, ["bug_id", "severity"], "bug")
 
-        return result, state
+        analysis = {
+            "bug_id": bug["bug_id"],
+            "impact_score": impact_score(bug["severity"]),
+        }
 
-# Export root_agent for ADK CLI (fallback if main.py is not found)
-root_agent = BugAnalysisAgent()
+        st = ctx.session.state["bug_analysis_state"]
+        st["run_count"] += 1
+        st["history"].append(analysis)
+
+        # persist in session.state via state_delta
+        yield state_delta_event(self.name, {
+            "analysis": analysis,
+            "bug_analysis_state": st,
+        })

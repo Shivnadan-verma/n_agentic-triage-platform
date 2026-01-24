@@ -75,13 +75,17 @@ python -m app.main
 
 **Note**: Always use `python -m app.main` instead of `python app/main.py` to avoid `ModuleNotFoundError`. This ensures Python correctly resolves the `app` module.
 
+`main.py` only calls the SupervisorAgent; the full pipeline (bug load, bug analysis, assignment) runs inside the agent. No manual calls to BugAnalysis or Assignment agents.
+
 ### Option 2: Run with ADK CLI (Interactive mode)
 ```bash
-# Run the main Triage Agent interactively
-adk run app/agents/triage
-
-# Or run individual agents
 adk run app/agents/supervisor
+```
+
+The Supervisor agent runs interactively. Bug Analysis and Assignment are invoked internally by the supervisor; you do not need to run them separately.
+
+Optionally, run individual agents for direct testing:
+```bash
 adk run app/agents/bug_analysis
 adk run app/agents/assignment
 ```
