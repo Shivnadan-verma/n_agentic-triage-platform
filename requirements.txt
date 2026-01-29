@@ -2,3 +2,9 @@
 google-adk
 google-cloud-aiplatform
 python-dotenv
+pydantic>=2.0
+cloudpickle>=2.0
+
+# FastAPI and ASGI server for REST API
+fastapi
+uvicorn

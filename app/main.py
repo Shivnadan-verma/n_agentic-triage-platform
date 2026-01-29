@@ -20,6 +20,7 @@ project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+from app.config import get_data_path, get_bugs_filenames
 from app.agents.supervisor.agent import SupervisorAgent
 from app.agents.supervisor.configuration import APP_NAME
 
@@ -55,9 +56,18 @@ async def main_async():
         app_name=APP_NAME, session_service=session_service, agent=agent
     )
 
-    with open("app/data/input/bugs.json", "r") as f:
+    bugs_file = None
+    for name in get_bugs_filenames():
+        path = get_data_path(name)
+        if path.exists():
+            bugs_file = path
+            break
+    if not bugs_file:
+        raise FileNotFoundError("No bugs file found; set BUGS_FILENAMES or add bugs.json/bug.json in data folder")
+    with open(bugs_file, "r", encoding="utf-8") as f:
         bugs = json.load(f)
-    print(f"\n[Input] Loading bugs from data folder...")
+    bugs = bugs if isinstance(bugs, list) else [bugs]
+    print(f"\n[Input] Loading bugs from {bugs_file}...")
     print(f"Found {len(bugs)} bugs to process\n")
 
     all_results = []

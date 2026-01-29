@@ -1,23 +1,21 @@
 import json
-from pathlib import Path
 from typing import AsyncGenerator
 from google.adk.agents import BaseAgent, InvocationContext
 from google.adk.events import Event
 
+from app.config import get_engineers_path
 from app.agents.common.common_guardrails import ensure_dict, ensure_list, ensure_keys
 from app.agents.common.event import state_delta_event
 from app.schemas.engineer_schema import REQUIRED_ENGINEER_FIELDS
 from .graph import pick_best
 from .state import initial_state
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-
 
 class AssignmentAgent(BaseAgent):
     """
     ADK Custom Agent (no LLM).
     Reads bug from ctx.session.state["bug"].
-    Loads engineers from app/data/input/engineer.json.
+    Loads engineers from configurable path (env: ENGINEERS_FILENAME, DATA_FOLDER).
     Writes assignment into ctx.session.state["assignment"].
     """
 
@@ -31,7 +29,7 @@ class AssignmentAgent(BaseAgent):
         ensure_dict(bug, "bug")
         ensure_keys(bug, ["bug_id", "product", "severity", "description"], "bug")
 
-        eng_path = _PROJECT_ROOT / "app" / "data" / "input" / "engineer.json"
+        eng_path = get_engineers_path()
         with open(eng_path, "r", encoding="utf-8") as f:
             engineers = json.load(f)
         ensure_list(engineers, "engineers")

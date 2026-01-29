@@ -64,6 +64,10 @@ agents_log/
 app.zip
 deploy.zip
 
+# Markdown (exclude README.md)
+*.md
+!README.md
+
 # Environment variables
 .env
 .env.local

@@ -1,7 +1,11 @@
 {
-  "bug_id": "BUG-1001",
-  "severity": "High",
-  "product": "Checkout",
-  "description": "Payment timeout during peak hours",
-  "required_skills": ["Payments", "Java"]
+  "instances": [
+    {
+      "bug_id": "BUG-1001",
+      "severity": "High",
+      "product": "Checkout",
+      "description": "Payment timeout during peak hours",
+      "required_skills": ["Payments", "Java"]
+    }
+  ]
 }

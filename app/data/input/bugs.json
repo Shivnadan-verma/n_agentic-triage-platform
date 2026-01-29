@@ -1,37 +1,39 @@
-[
-  {
-    "bug_id": "BUG-1001",
-    "severity": "High",
-    "product": "Checkout",
-    "description": "Payment timeout during peak hours",
-    "required_skills": ["Payments", "Java"]
-  },
-  {
-    "bug_id": "BUG-1002",
-    "severity": "Medium",
-    "product": "Orders",
-    "description": "Order status not updating correctly",
-    "required_skills": ["SQL", "Database"]
-  },
-  {
-    "bug_id": "BUG-1003",
-    "severity": "Critical",
-    "product": "Checkout",
-    "description": "Payment gateway connection failure",
-    "required_skills": ["Payments", "Java"]
-  },
-  {
-    "bug_id": "BUG-1004",
-    "severity": "Low",
-    "product": "Orders",
-    "description": "Minor UI alignment issue in order list",
-    "required_skills": ["python"]
-  },
-  {
-    "bug_id": "BUG-1005",
-    "severity": "High",
-    "product": "Checkout",
-    "description": "Discount code validation failing",
-    "required_skills": ["Payments", "Java"]
-  }
-]
+{
+  "instances": [
+    {
+      "bug_id": "BUG-1001",
+      "severity": "High",
+      "product": "Checkout",
+      "description": "Payment timeout during peak hours",
+      "required_skills": ["Payments", "Java"]
+    },
+    {
+      "bug_id": "BUG-1002",
+      "severity": "Medium",
+      "product": "Orders",
+      "description": "Order status not updating correctly",
+      "required_skills": ["SQL", "Database"]
+    },
+    {
+      "bug_id": "BUG-1003",
+      "severity": "Critical",
+      "product": "Checkout",
+      "description": "Payment gateway connection failure",
+      "required_skills": ["Payments", "Java"]
+    },
+    {
+      "bug_id": "BUG-1004",
+      "severity": "Low",
+      "product": "Orders",
+      "description": "Minor UI alignment issue in order list",
+      "required_skills": ["python"]
+    },
+    {
+      "bug_id": "BUG-1005",
+      "severity": "High",
+      "product": "Checkout",
+      "description": "Discount code validation failing",
+      "required_skills": ["Payments", "Java"]
+    }
+  ]
+}

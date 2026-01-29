@@ -1,166 +1,182 @@
+# AI assisted development
+"""
+Supervisor Agent - Entry Point and Orchestrator
+
+ADK Usage:
+- Inherits from google.adk.Agent (ADK base class)
+- Uses ADK's initialization: name, instruction
+- Uses ADK's run(input, state) method signature
+- Exports root_agent for ADK CLI
+
+A2A Usage (via server.py):
+- Uses RemoteA2aAgent for agent-to-agent communication
+- Uses AgentTool to wrap agents as tools
+- Uses to_a2a() to create A2A server
+"""
 import json
-import re
+import os
 from pathlib import Path
-from typing import AsyncGenerator
-
-from google.genai import types
-from google.adk.agents import BaseAgent, InvocationContext
-from google.adk.events import Event, EventActions
-
-from app.agents.common.common_guardrails import ensure_dict, ensure_keys
-from app.agents.common.event import state_delta_event
-from app.agents.bug_analysis.agent import BugAnalysisAgent
-from app.agents.assignment.agent import AssignmentAgent
-from app.schemas.bug_schema import REQUIRED_BUG_FIELDS
+from google.adk import Agent  
+from .prompts import SYSTEM_PROMPT
 from .state import initial_state
-from .graph import routes
+from .graph import determine_routes
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_DATA_DIR = _PROJECT_ROOT / "app" / "data" / "input"
+# Set default model to gemini-1.5-flash via environment variable
+os.environ.setdefault("GOOGLE_GENAI_MODEL", "gemini-1.5-flash")
 
-_HELP_MSG = """I need a bug to process. Options:
-1. Put a bug in session state as input_bug (when using Runner/session).
-2. Say a bug_id (e.g. 1001 or BUG-1001) to load from app/data/input/bugs.json.
-3. Paste JSON: {"bug_id":"BUG-1001","severity":"High","product":"Checkout","description":"...","required_skills":["Payments"]}.
-4. I'll also try app/data/input/bug.json if none of the above."""
+from app.config import get_data_folder, get_default_bug_file, get_workspace_root
 
 
-def _get_user_text(ctx: InvocationContext) -> str:
-    if not ctx.user_content or not ctx.user_content.parts:
-        return ""
-    return " ".join((p.text or "") for p in ctx.user_content.parts).strip()
+class SupervisorAgent(Agent):
+    """
+    Supervisor Agent using Google ADK.
+    
+    ADK Features Used:
+    - Inherits from google.adk.Agent
+    - Uses ADK's __init__(name, instruction) pattern
+    - Uses ADK's run(input, state) method signature
+    - Uses gemini-1.5-flash model
+    """
 
+    def __init__(self):
+        # Model is set via GOOGLE_GENAI_MODEL environment variable (gemini-1.5-flash)
+        super().__init__(
+            name="SupervisorAgent",
+            instruction=SYSTEM_PROMPT
+        )
 
-def _resolve_bug_from_input(ctx: InvocationContext) -> dict | None:
-    bug = ctx.session.state.get("input_bug")
-    if isinstance(bug, dict):
-        return bug
-    text = _get_user_text(ctx)
-    if not text:
-        return None
-    # Try JSON
-    text = text.strip()
-    if text.startswith("{"):
+    def _resolve_path(self, file_path):
+        """
+        Resolve file path to absolute path.
+        Supports:
+        - Absolute paths
+        - Relative paths from workspace root
+        - Relative paths from data folder
+        """
+        path = Path(file_path)
+        root = get_workspace_root()
+        data_folder = get_data_folder()
+
+        if path.is_absolute():
+            return path
+
+        workspace_path = root / file_path
+        if workspace_path.exists():
+            return workspace_path
+
+        data_path = root / data_folder / file_path
+        if data_path.exists():
+            return data_path
+
+        return workspace_path
+
+    def _load_bug_file(self, file_path):
+        """
+        Load bug data from a JSON file.
+        Supports both single bug object and array of bugs.
+        Returns the bug data and a flag indicating if it's an array.
+        """
+        resolved_path = self._resolve_path(file_path)
+        root = get_workspace_root()
+        data_folder = get_data_folder()
+
+        if not resolved_path.exists():
+            raise FileNotFoundError(
+                f"File not found: {file_path}\n"
+                f"Tried paths:\n"
+                f"  - {resolved_path}\n"
+                f"  - {root / data_folder / file_path}"
+            )
+
         try:
-            obj = json.loads(text)
-            if isinstance(obj, dict) and obj.get("bug_id"):
-                return obj
-        except json.JSONDecodeError:
-            pass
-    # Try bug_id: 1001, BUG-1001, "bug 1001", "bug id 1001"
-    m = re.search(r"(?:BUG-)?(\d+)", text, re.IGNORECASE)
-    if m:
-        bid = f"BUG-{m.group(1)}"
-        path = _DATA_DIR / "bugs.json"
-        if path.exists():
-            with open(path, "r", encoding="utf-8") as f:
+            with open(resolved_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            bugs = data if isinstance(data, list) else [data]
-            for b in bugs:
-                if (b.get("bug_id") or "").upper() == bid:
-                    return b
-    return None
 
+            is_array = isinstance(data, list)
+            return data, is_array, str(resolved_path)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in file: {file_path}\nError: {str(e)}")
 
-def _load_default_bug() -> dict | None:
-    path = _DATA_DIR / "bug.json"
-    if not path.exists():
-        return None
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    return data if isinstance(data, dict) else (data[0] if data else None)
+    def run(self, input, state=None):
+        if state is None:
+            state = initial_state()
 
+        bug = None
+        bugs_list = None
+        
+        # Support multiple input formats
+        if isinstance(input, dict):
+            # Format 1: file_path specified
+            if "file_path" in input:
+                file_path = input["file_path"]
+                try:
+                    data, is_array, resolved_path = self._load_bug_file(file_path)
+                    if is_array:
+                        bugs_list = data
+                        print(f"[Supervisor] Loaded {len(bugs_list)} bugs from: {resolved_path}")
+                        # Use first bug for processing
+                        bug = bugs_list[0] if bugs_list else None
+                    else:
+                        bug = data
+                        print(f"[Supervisor] Loaded bug from: {resolved_path}")
+                except (FileNotFoundError, ValueError) as e:
+                    return {"error": str(e)}, state
+            
+            # Format 2: bug_id specified (direct bug payload)
+            elif "bug_id" in input:
+                bug = input
+                print("[Supervisor] Received direct bug payload")
+            
+            # Format 3: bug_file_name (short name in data folder)
+            elif "bug_file_name" in input:
+                file_name = input["bug_file_name"]
+                # Auto-add .json if not present
+                if not file_name.endswith(".json"):
+                    file_name += ".json"
+                try:
+                    data, is_array, resolved_path = self._load_bug_file(file_name)
+                    if is_array:
+                        bugs_list = data
+                        print(f"[Supervisor] Loaded {len(bugs_list)} bugs from: {resolved_path}")
+                        bug = bugs_list[0] if bugs_list else None
+                    else:
+                        bug = data
+                        print(f"[Supervisor] Loaded bug from: {resolved_path}")
+                except (FileNotFoundError, ValueError) as e:
+                    return {"error": str(e)}, state
+        
+        # Default: try to load from default data folder (configurable via env)
+        if bug is None:
+            default_path = get_default_bug_file()
+            try:
+                data, is_array, resolved_path = self._load_bug_file(default_path)
+                if is_array:
+                    bugs_list = data
+                    print(f"[Supervisor] Loaded {len(bugs_list)} bugs from default: {resolved_path}")
+                    bug = bugs_list[0] if bugs_list else None
+                else:
+                    bug = data
+                    print(f"[Supervisor] Loaded bug from default: {resolved_path}")
+            except (FileNotFoundError, ValueError) as e:
+                return {
+                    "error": f"Could not load default bug file. {str(e)}\n"
+                            f"Please provide input with 'file_path', 'bug_file_name', or 'bug_id'"
+                }, state
 
-class SupervisorAgent(BaseAgent):
-    """
-    ADK Custom Agent orchestrator.
-    """
+        if bug is None:
+            return {"error": "No bug data found or loaded"}, state
 
-    def __init__(self, name="SupervisorAgent"):
-        bug_analysis = BugAnalysisAgent()
-        assignment = AssignmentAgent()
-        super().__init__(name=name, sub_agents=[bug_analysis, assignment])
+        routes = determine_routes()
 
-    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
-        ctx.session.state.setdefault("supervisor_state", initial_state())
+        state["run_count"] += 1
+        if "bugs_processed" in state:
+            state["bugs_processed"].append(bug["bug_id"])
 
-        bug = _resolve_bug_from_input(ctx)
-        if not isinstance(bug, dict):
-            bug = _load_default_bug()
-        if not isinstance(bug, dict):
-            yield Event(
-                invocation_id=ctx.invocation_id,
-                author=self.name,
-                content=types.Content(role="model", parts=[types.Part(text=_HELP_MSG)]),
-            )
-            return
-        try:
-            ensure_dict(bug, "input_bug")
-            ensure_keys(bug, REQUIRED_BUG_FIELDS, "bug")
-        except ValueError as e:
-            yield Event(
-                invocation_id=ctx.invocation_id,
-                author=self.name,
-                content=types.Content(role="model", parts=[types.Part(text=f"Invalid bug: {e}")]),
-            )
-            return
+        result = {"routes": routes, "bug": bug}
+        if bugs_list:
+            result["bugs_list"] = bugs_list
 
-        # update supervisor state
-        st = ctx.session.state["supervisor_state"]
-        st["run_count"] += 1
-        st["bugs_processed"].append(bug["bug_id"])
+        return result, state
 
-        # store canonical bug for downstream agents
-        yield state_delta_event(self.name, {
-            "bug": bug,
-            "routes": routes(),
-            "supervisor_state": st,
-        })
-
-        # run sub-agents (order: bug_analysis, then assignment)
-        bug_analysis = next(a for a in self.sub_agents if a.name == "BugAnalysisAgent")
-        assignment = next(a for a in self.sub_agents if a.name == "AssignmentAgent")
-        async for ev in bug_analysis.run_async(ctx):
-            yield ev
-        async for ev in assignment.run_async(ctx):
-            yield ev
-
-        # build final output
-        analysis = ctx.session.state.get("analysis")
-        assignment = ctx.session.state.get("assignment")
-        engineer = ctx.session.state.get("engineer")
-
-        final_result = {
-            "routes": ctx.session.state.get("routes", []),
-            "bug": bug,
-            "analysis": analysis,
-            "assignment": assignment,
-            "engineer": engineer,
-        }
-
-        # Build user-visible summary (ADK CLI shows Event.content, not state_delta)
-        ato = (assignment or {}).get("assigned_to") or {}
-        eng = engineer or {}
-        an = ato.get("name") if isinstance(ato, dict) else None
-        if not an:
-            an = eng.get("name") or (ato.get("ldap_id") if isinstance(ato, dict) else None) or "—"
-        ldap = ato.get("ldap_id") if isinstance(ato, dict) else str(ato) if ato else "—"
-        impact = (analysis or {}).get("impact_score", "?")
-        summary = (
-            f"Bug {bug['bug_id']} has been processed.\n"
-            f"- Impact score: {impact}\n"
-            f"- Assigned to: {an} ({ldap})"
-        )
-        if eng and eng.get("skill_set"):
-            summary += f"\n- Skills: {', '.join(eng.get('skill_set', []))}"
-        summary += "\n"
-
-        yield Event(
-            invocation_id=ctx.invocation_id,
-            author=self.name,
-            content=types.Content(role="model", parts=[types.Part(text=summary)]),
-            actions=EventActions(state_delta={"final_result": final_result}),
-        )
-
-
+# Export root_agent for ADK CLI (fallback if main.py is not found)
 root_agent = SupervisorAgent()
